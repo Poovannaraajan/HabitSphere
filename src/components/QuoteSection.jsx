@@ -37,31 +37,48 @@ const QuoteSection = ({ isPreview = false }) => {
   }, []);
 
   // Fetch quote from Quotable API
-  const fetchQuote = async (category = quoteCategory) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const selectedCategory = categories.find(cat => cat.id === category);
-      const tags = selectedCategory?.tags || '';
-      
-      const response = await fetch(
-        `https://api.quotable.io/random?tags=${tags}&minLength=50&maxLength=200`
-      );
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch quote');
+ const fetchQuote = async () => {
+  setIsLoading(true);
+  setError(null);
+
+  try {
+    // Pick a random category
+    const categoryOptions = ['success', 'wisdom', 'inspirational'];
+    const categoryTags = categoryOptions[Math.floor(Math.random() * categoryOptions.length)];
+
+    const response = await fetch(
+      `https://api.api-ninjas.com/v2/randomquotes?category=${categoryTags}`,
+      {
+        headers: {
+          'X-Api-Key': 'jmobJgprZH8RQ4ogIUMpSQ==lJAccYXB0kSI5hRg',
+        },
       }
-      
-      const quote = await response.json();
-      setCurrentQuote(quote);
-    } catch (err) {
-      setError('Unable to load inspirational quote. Please try again.');
-      console.error('Quote fetch error:', err);
-    } finally {
-      setIsLoading(false);
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  };
+
+    const quoteData = await response.json();
+    const quote = quoteData[0];
+
+    setCurrentQuote({
+      _id: Date.now().toString(),
+      content: quote.quote,
+      author: quote.author || 'Unknown',
+      tags: [categoryTags],
+    });
+
+  } catch (err) {
+    setError('Unable to load inspirational quote. Please try again.');
+    console.error('Quote fetch error:', err);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+
+
 
   // Initial quote fetch
   useEffect(() => {
