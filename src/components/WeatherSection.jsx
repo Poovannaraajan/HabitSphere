@@ -127,11 +127,6 @@ const WeatherSection = ({ location = 'Calcutta', isPreview = false }) => {
     setIsLoading(false);
   }
 };
-
-
-
-
-
   useEffect(() => {
     fetchWeatherData();
   }, [location]);
