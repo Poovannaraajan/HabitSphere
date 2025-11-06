@@ -13,7 +13,7 @@ import React, { useState, useEffect } from 'react';
 import { Cloud, Sun, CloudRain, Wind, Thermometer, Droplets } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 
-const WeatherSection = ({ location = 'New York', isPreview = false }) => {
+const WeatherSection = ({ location = 'Calcutta', isPreview = false }) => {
   const [weatherData, setWeatherData] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,72 +21,116 @@ const WeatherSection = ({ location = 'New York', isPreview = false }) => {
 
   // OpenWeatherMap API key - In production, use environment variables
   const API_KEY = 'demo'; // Replace with actual API key
-  const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+  const BASE_URL = 'https://api.open-meteo.com/v1/forecast?latitude=22.5626&longitude=88.363&daily=weather_code,temperature_2m_mean&hourly=temperature_2m,visibility,wind_speed_10m,pressure_msl,relative_humidity_2m&current=temperature_2m,weather_code,is_day&timezone=Asia%2FBangkok&wind_speed_unit=ms';
 
   // Fetch weather data
   const fetchWeatherData = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // For demo purposes, using mock data since API key is needed
-      // In production, uncomment the real API calls below
-      
-      /*
-      const currentResponse = await fetch(
-        `${BASE_URL}/weather?q=${location}&appid=${API_KEY}&units=metric`
-      );
-      const forecastResponse = await fetch(
-        `${BASE_URL}/forecast?q=${location}&appid=${API_KEY}&units=metric`
-      );
-      
-      if (!currentResponse.ok || !forecastResponse.ok) {
-        throw new Error('Weather data not available');
-      }
-      
-      const currentData = await currentResponse.json();
-      const forecastData = await forecastResponse.json();
-      */
-      
-      // Mock data for demo
-      const currentData = {
-        name: location,
-        main: {
-          temp: 22,
-          feels_like: 24,
-          humidity: 65,
-          pressure: 1013
-        },
-        weather: [{
-          main: 'Clear',
-          description: 'clear sky',
-          icon: '01d'
-        }],
-        wind: {
-          speed: 3.5
-        },
-        visibility: 10000
-      };
-      
-      const forecastData = {
-        list: [
-          { dt: Date.now() / 1000, main: { temp: 25 }, weather: [{ main: 'Sunny', icon: '01d' }] },
-          { dt: (Date.now() / 1000) + 86400, main: { temp: 23 }, weather: [{ main: 'Cloudy', icon: '02d' }] },
-          { dt: (Date.now() / 1000) + 172800, main: { temp: 18 }, weather: [{ main: 'Rain', icon: '09d' }] },
-          { dt: (Date.now() / 1000) + 259200, main: { temp: 20 }, weather: [{ main: 'Cloudy', icon: '03d' }] },
-          { dt: (Date.now() / 1000) + 345600, main: { temp: 26 }, weather: [{ main: 'Sunny', icon: '01d' }] }
-        ]
-      };
-      
-      setWeatherData(currentData);
-      setForecast(forecastData);
-    } catch (err) {
-      setError('Unable to fetch weather data. Please check your API key and try again.');
-      console.error('Weather fetch error:', err);
-    } finally {
-      setIsLoading(false);
+  setIsLoading(true);
+  setError(null);
+
+  try {
+    const response = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=22.5626&longitude=88.363&daily=weather_code,temperature_2m_mean&hourly=temperature_2m,visibility,wind_speed_10m,pressure_msl,relative_humidity_2m&current=temperature_2m,weather_code,is_day&timezone=Asia%2FBangkok&wind_speed_unit=ms`
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch weather data");
     }
-  };
+
+    const data = await response.json();
+
+    // Helper for safe value access
+    const getValue = (arr, index, fallback = null) =>
+      Array.isArray(arr) && arr.length > index ? arr[index] : fallback;
+
+    // ---- Current Weather ----
+    const currentTemp = data.current?.temperature_2m ?? 25;
+    const currentCode = data.current?.weather_code ?? 0;
+    const isDay = data.current?.is_day ?? 1;
+
+    // ---- Determine Weather Text from weather_code ----
+    const weatherMap = {
+      0: "Clear",
+      1: "Mainly Clear",
+      2: "Partly Cloudy",
+      3: "Overcast",
+      45: "Foggy",
+      48: "Depositing Rime Fog",
+      51: "Light Drizzle",
+      53: "Moderate Drizzle",
+      55: "Dense Drizzle",
+      61: "Light Rain",
+      63: "Moderate Rain",
+      65: "Heavy Rain",
+      71: "Light Snow",
+      73: "Moderate Snow",
+      75: "Heavy Snow",
+      80: "Rain Showers",
+      95: "Thunderstorm",
+    };
+
+    const weatherCondition = weatherMap[currentCode] || "Clear";
+    const icon = isDay ? "01d" : "01n";
+
+    // ---- Extract Other Hourly Metrics ----
+    const humidity = getValue(data.hourly?.relative_humidity_2m, 0, 60);
+    const pressure = Math.round(getValue(data.hourly?.pressure_msl, 0, 1013));
+    const windSpeed = getValue(data.hourly?.wind_speed_10m, 0, 2.0);
+    const visibility = getValue(data.hourly?.visibility, 0, 10000);
+
+    // ---- Structure Current Data ----
+    const currentData = {
+      name: "Calcutta",
+      main: {
+        temp: currentTemp,
+        feels_like: currentTemp,
+        humidity,
+        pressure,
+      },
+      weather: [
+        {
+          main: weatherCondition,
+          description: weatherCondition.toLowerCase(),
+          icon,
+        },
+      ],
+      wind: {
+        speed: windSpeed,
+      },
+      visibility,
+    };
+
+    // ---- Forecast Data ----
+    const temps = data.daily?.temperature_2m_mean || [];
+    const weatherCodes = data.daily?.weather_code || [];
+
+    const forecastData = {
+      list: temps.slice(0, 5).map((temp, i) => ({
+        dt: Date.now() / 1000 + i * 86400,
+        main: { temp },
+        weather: [
+          {
+            main: weatherMap[weatherCodes[i]] || "Clear",
+            icon: isDay ? "01d" : "01n",
+          },
+        ],
+        humidity: getValue(data.hourly?.relative_humidity_2m, i, 60),
+      })),
+    };
+
+    setWeatherData(currentData);
+    setForecast(forecastData);
+  } catch (err) {
+    console.error("Weather fetch error:", err);
+    setError("Unable to fetch weather data. Please try again later.");
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+
+
+
 
   useEffect(() => {
     fetchWeatherData();
