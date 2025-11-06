@@ -154,37 +154,57 @@ const WeatherSection = ({ location = 'Chennai', isPreview = false }) => {
 
   // Generate activity recommendations
   const getActivityRecommendations = (weather) => {
-    if (!weather) return [];
-    const temp = weather.main.temp;
-    const condition = weather.weather[0].main.toLowerCase();
-    const recs = [];
+  if (!weather) return [];
+  const temp = weather.main.temp;
+  const condition = weather.weather[0].main.toLowerCase();
+  const recs = [];
 
-    if (condition === 'clear' && temp > 20) {
+  if (condition.includes('clear') || condition.includes('sun')) {
+    if (temp > 25) {
       recs.push(
-        { activity: '🚶‍♀️ Go for a walk', reason: 'Perfect weather for outdoor activities' },
-        { activity: '🏃‍♂️ Outdoor jogging', reason: 'Great temperature for running' },
-        { activity: '📚 Read outside', reason: 'Enjoy the sunshine while reading' }
-      );
-    } else if (condition === 'rain') {
-      recs.push(
-        { activity: '🧘‍♀️ Indoor yoga', reason: 'Perfect for indoor mindfulness' },
-        { activity: '📖 Read a book', reason: 'Cozy weather for indoor activities' },
-        { activity: '☕ Enjoy hot tea', reason: 'Warm up with a hot beverage' }
-      );
-    } else if (temp < 10) {
-      recs.push(
-        { activity: '🧥 Layer up', reason: 'Cold weather requires warm clothing' },
-        { activity: '🏠 Indoor workout', reason: 'Stay warm with indoor exercise' },
-        { activity: '🍲 Hot soup', reason: 'Warm food for cold weather' }
+        { activity: '🏊‍♂️ Go swimming', reason: 'Hot and sunny — perfect for water activities!' },
+        { activity: '🍹 Enjoy a cool drink', reason: 'Stay hydrated and refreshed' },
+        { activity: '🌳 Picnic outdoors', reason: 'Sunny skies make for a great outing' }
       );
     } else {
       recs.push(
-        { activity: '🚶‍♀️ Light walk', reason: 'Mild weather for gentle activities' },
-        { activity: '🌱 Gardening', reason: 'Good conditions for outdoor tasks' }
+        { activity: '🚶‍♀️ Go for a walk', reason: 'Perfect weather for outdoor activities' },
+        { activity: '🚴‍♂️ Try cycling', reason: 'Comfortable temperature for outdoor exercise' }
       );
     }
-    return recs;
-  };
+  } else if (condition.includes('rain') || condition.includes('drizzle') || condition.includes('showers')) {
+    recs.push(
+      { activity: '📖 Read a book', reason: 'Cozy weather for indoor activities' },
+      { activity: '☕ Enjoy a warm drink', reason: 'Stay warm and relaxed indoors' },
+      { activity: '🧘‍♀️ Try yoga or meditation', reason: 'Perfect time for calm mindfulness' }
+    );
+  } else if (condition.includes('snow')) {
+    recs.push(
+      { activity: '☃️ Build a snowman', reason: 'Make the most of the snowfall' },
+      { activity: '🔥 Stay by the heater', reason: 'Keep yourself warm indoors' }
+    );
+  } else if (condition.includes('cloud') || condition.includes('overcast') || condition.includes('fog') || condition.includes('thunderstorm')) {
+    recs.push(
+      { activity: '🎬 Watch a movie', reason: 'Cozy up indoors on a gloomy day' },
+      { activity: '🧁 Try baking', reason: 'Good time for indoor hobbies' }
+    );
+  } else {
+    recs.push(
+      { activity: '🚶‍♂️ Light walk', reason: 'Mild weather for light activities' },
+      { activity: '📚 Read something new', reason: 'Relax and learn something fresh' }
+    );
+  }
+
+  // Add temperature-based extras
+  if (temp < 15) {
+    recs.push({ activity: '🧥 Wear warm clothes', reason: 'Chilly weather outside' });
+  } else if (temp > 32) {
+    recs.push({ activity: '💧 Stay hydrated', reason: 'It’s quite hot today' });
+  }
+
+  return recs;
+};
+
 
   // --- PREVIEW MODE ---
   if (isPreview) {
