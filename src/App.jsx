@@ -25,6 +25,21 @@ function App() {
     }
   }, [navigate]);
 
+  // 🟢 Initialize Tawk.to live chat
+  useEffect(() => {
+    var Tawk_API = Tawk_API || {};
+    var Tawk_LoadStart = new Date();
+    (function () {
+      var s1 = document.createElement("script");
+      var s0 = document.getElementsByTagName("script")[0];
+      s1.async = true;
+      s1.src = "https://embed.tawk.to/6910aa371c1717195b8413a6/1j9khhr6l"; // ✅ your actual Tawk.to widget link
+      s1.charset = "UTF-8";
+      s1.setAttribute("crossorigin", "*");
+      s0.parentNode.insertBefore(s1, s0);
+    })();
+  }, []);
+
   // Global app state management
   const [isLoading, setIsLoading] = useState(true);
   const [currentSection, setCurrentSection] = useState('dashboard');
