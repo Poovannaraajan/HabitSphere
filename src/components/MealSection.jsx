@@ -47,7 +47,7 @@ const MealSection = ({ dietaryRestrictions = [] }) => {
     carbs: { min: 225, max: 325, unit: 'g' },
     fat: { min: 44, max: 78, unit: 'g' },
     fiber: { min: 25, max: 38, unit: 'g' },
-    sugar: { max: 50, unit: 'g' },
+    sugar: { max: 100, unit: 'g' },
     sodium: { max: 2300, unit: 'mg' }
   };
 
@@ -217,11 +217,15 @@ const MealSection = ({ dietaryRestrictions = [] }) => {
       .filter(item => item.length > 0);
   };
 
- const searchFood = async (foodName) => {
+ // ============= API FUNCTIONS - USDA API =============
+const USDA_API_KEY = 'K7W4erRA3cpDwVaIToXuOuoSEbOAvwg9Bj3ZELOu'; // Replace with your key
+
+const searchFood = async (foodName) => {
   try {
     console.log('🔍 Searching for:', foodName);
     
-    const response = await fetch('http://localhost:5000/api/fatsecret/search', {
+    // Call YOUR BACKEND, not USDA directly
+    const response = await fetch('http://localhost:5000/api/usda/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: foodName })
@@ -233,67 +237,97 @@ const MealSection = ({ dietaryRestrictions = [] }) => {
     }
 
     const data = await response.json();
+    console.log('📥 Frontend received:', data.foods?.length || 0, 'foods');
     
-    // ✅ DETAILED DEBUGGING
-    console.log('\n📊 Full response:', JSON.stringify(data, null, 2));
-    console.log('\n📊 Response keys:', Object.keys(data));
-    console.log('📊 data.foods:', data.foods);
-    console.log('📊 data.foods.food:', data.foods?.food);
-    console.log('📊 Is array?:', Array.isArray(data.foods?.food));
-    
-    let foodArray = [];
-    if (Array.isArray(data.foods?.food)) {
-      foodArray = data.foods.food;
-      console.log('✅ Found array at: data.foods.food, length:', foodArray.length);
-    } else if (Array.isArray(data.foods)) {
-      foodArray = data.foods;
-      console.log('✅ Found array at: data.foods');
-    } else if (Array.isArray(data)) {
-      foodArray = data;
-      console.log('✅ Found array at: data');
-    } else {
-      console.error('❌ No array found in response!');
-      console.log('📊 What we got:', typeof data, data);
-    }
-    
-    console.log('\n🔍 Returning', foodArray.length, 'foods');
-    
-    if (foodArray.length > 0) {
-      console.log('✅ First food item:', foodArray);
-      console.log('   - food_name:', foodArray.food_name);
-      console.log('   - food_id:', foodArray.food_id);
-    }
-    
-    return foodArray;
+    // Transform USDA response
+    const foods = (data.foods || []).map(food => ({
+      food_id: food.fdcId,
+      food_name: food.description,
+      food_type: food.dataType,
+      serving_size: food.servingSize || 100,
+      serving_unit: food.servingSizeUnit || 'g'
+    }));
+
+    console.log('✅ Found', foods.length, 'foods');
+    return foods;
   } catch (err) {
     console.error('❌ Search error:', err);
     return [];
   }
 };
 
+const getNutrientValue = (nutrients, nutrientId) => {
+  if (!nutrients || !Array.isArray(nutrients)) {
+    console.warn('⚠️ Nutrients not an array:', nutrients);
+    return 0;
+  }
 
-  const getFoodDetails = async (foodId) => {
-    try {
-      console.log('📋 Getting details for food ID:', foodId);
-      
-      const response = await fetch('http://localhost:5000/api/fatsecret/food', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ food_id: foodId })
-      });
+  // Try different possible field names
+  const nutrient = nutrients.find(n => {
+    // Try: nutrientId
+    if (n.nutrientId === nutrientId) return true;
+    // Try: id
+    if (n.id === nutrientId) return true;
+    // Try: nutrient.id
+    if (n.nutrient?.id === nutrientId) return true;
+    return false;
+  });
 
-      if (!response.ok) {
-        console.error('Food details failed:', response.status);
-        throw new Error('Failed to get food details');
-      }
+  if (!nutrient) {
+    console.warn(`⚠️ Nutrient ${nutrientId} not found`);
+    return 0;
+  }
 
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      console.error('❌ Food details error:', err);
-      return null;
+  // Try different possible value field names
+  const value = nutrient.value || nutrient.amount || nutrient.quantity || 0;
+  return parseFloat(value) || 0;
+};
+
+const getFoodDetails = async (foodId) => {
+  try {
+    console.log('📋 Getting details for food ID:', foodId);
+    
+    const response = await fetch('http://localhost:5000/api/usda/food', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ food_id: foodId })
+    });
+
+    if (!response.ok) {
+      console.error('Food details failed:', response.status);
+      throw new Error('Failed to get food details');
     }
-  };
+
+    const data = await response.json();
+    console.log('📋 Food details received');
+    console.log('📊 Full food data:', JSON.stringify(data, null, 2)); // DEBUG
+    
+    const nutrients = data.foodNutrients || [];
+    
+    console.log('🔍 Available nutrients:', nutrients.length);
+    nutrients.slice(0, 5).forEach(n => {
+      console.log('  -', n.nutrientId, ':', n.value, n.unitName);
+    });
+
+    return {
+      nutrition: {
+        calories: getNutrientValue(nutrients, 1008),    // Energy (kcal)
+        protein: getNutrientValue(nutrients, 1003),      // Protein
+        carbs: getNutrientValue(nutrients, 1005),        // Carbohydrate
+        fat: getNutrientValue(nutrients, 1004),          // Total Fat
+        fiber: getNutrientValue(nutrients, 1079),        // Fiber
+        sugar: getNutrientValue(nutrients, 2000),        // Sugars
+        sodium: getNutrientValue(nutrients, 1093)        // Sodium
+      }
+    };
+  } catch (err) {
+    console.error('❌ Food details error:', err);
+    return null;
+  }
+};
+
+
+
 
   // ============= HELPER FUNCTIONS =============
   const analyzeHealthInsights = () => {
@@ -385,121 +419,117 @@ const MealSection = ({ dietaryRestrictions = [] }) => {
 
   // ============= MAIN HANDLER =============
   const handleLogFood = async () => {
-    if (!userFoodInput.trim()) return;
+  if (!userFoodInput.trim()) return;
 
-    setIsProcessingFood(true);
-    setError(null);
+  setIsProcessingFood(true);
+  setError(null);
 
-    try {
-      const foodNames = parseFoodInput(userFoodInput);
-      console.log('📝 Parsed foods:', foodNames);
+  try {
+    const foodNames = parseFoodInput(userFoodInput);
+    console.log('📝 Parsed foods:', foodNames);
 
-      const newFoods = [];
+    const newFoods = [];
 
-      for (const foodName of foodNames) {
-        console.log('\n🔄 Processing:', foodName);
-        
-        const searchResults = await searchFood(foodName);
-        console.log('Found', searchResults.length, 'results');
-        
-        if (!searchResults || searchResults.length === 0) {
-          console.warn('⚠️ No results for:', foodName);
-          continue;
-        }
-
-        const firstFood = searchResults[0]; 
-        console.log('✅ Selected food:', firstFood.food_name, 'ID:', firstFood.food_id);
-        
-        if (!firstFood.food_id) {
-          console.warn('⚠️ No food ID');
-          continue;
-        }
-        
-        const foodDetails = await getFoodDetails(firstFood.food_id);
-        
-        if (!foodDetails || !foodDetails.food || !foodDetails.food.servings) {
-          console.warn('⚠️ No servings data');
-          continue;
-        }
-
-        const serving = Array.isArray(foodDetails.food.servings.serving)
-          ? foodDetails.food.servings.serving[0]
-          : foodDetails.food.servings.serving;
-
-        if (!serving) {
-          console.warn('⚠️ No serving object');
-          continue;
-        }
-
-        console.log('📊 Serving:', serving);
-
-        newFoods.push({
-          id: Date.now() + Math.random(),
-          food_id: firstFood.food_id,
-          food_name: firstFood.food_name,
-          food_brand: firstFood.food_brand || '',
-          serving_description: serving.serving_description || '1 serving',
-          nutrition: {
-            calories: parseFloat(serving.calories || 0),
-            protein: parseFloat(serving.protein || 0),
-            carbs: parseFloat(serving.carbohydrate || 0),
-            fat: parseFloat(serving.fat || 0),
-            fiber: parseFloat(serving.fiber || 0),
-            sugar: parseFloat(serving.sugar || 0),
-            sodium: parseFloat(serving.sodium || 0)
-          }
-        });
-      }
-
-      if (newFoods.length === 0) {
-        setError('❌ No foods found. Try: "egg", "apple", "coffee"');
-        setIsProcessingFood(false);
-        return;
-      }
-
-      let totalNutrition = {
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fat: 0,
-        fiber: 0,
-        sugar: 0,
-        sodium: 0
-      };
-
-      newFoods.forEach(food => {
-        totalNutrition.calories += food.nutrition.calories || 0;
-        totalNutrition.protein += food.nutrition.protein || 0;
-        totalNutrition.carbs += food.nutrition.carbs || 0;
-        totalNutrition.fat += food.nutrition.fat || 0;
-        totalNutrition.fiber += food.nutrition.fiber || 0;
-        totalNutrition.sugar += food.nutrition.sugar || 0;
-        totalNutrition.sodium += food.nutrition.sodium || 0;
-      });
-
-      console.log('📊 Total nutrition:', totalNutrition);
-
-      setLoggedFoods(prev => [...prev, ...newFoods]);
+    for (const foodName of foodNames) {
+      console.log('\n🔄 Processing:', foodName);
       
-      setDailyNutrition(prev => ({
-        calories: prev.calories + totalNutrition.calories,
-        protein: prev.protein + totalNutrition.protein,
-        carbs: prev.carbs + totalNutrition.carbs,
-        fat: prev.fat + totalNutrition.fat,
-        fiber: prev.fiber + totalNutrition.fiber,
-        sugar: prev.sugar + totalNutrition.sugar,
-        sodium: prev.sodium + totalNutrition.sodium
-      }));
+      // Step 1: Search for food
+      const searchResults = await searchFood(foodName);
+      console.log('Found', searchResults.length, 'results');
+      
+      if (!searchResults || searchResults.length === 0) {
+        console.warn('⚠️ No results for:', foodName);
+        continue;
+      }
 
-      setUserFoodInput('');
-      console.log('✅ Successfully logged', newFoods.length, 'foods');
-    } catch (err) {
-      console.error('❌ Error logging food:', err);
-      setError('Failed to log food. Check console for details.');
-    } finally {
-      setIsProcessingFood(false);
+      // ✅ FIX: Get FIRST element from array (was: const firstFood = searchResults;)
+      const firstFood = searchResults[0];
+      console.log('✅ Selected food:', firstFood.food_name, 'ID:', firstFood.food_id);
+      
+      if (!firstFood.food_id) {
+        console.warn('⚠️ No food ID');
+        continue;
+      }
+      
+      // Step 2: Get detailed nutrition
+      const foodDetails = await getFoodDetails(firstFood.food_id);
+      
+      if (!foodDetails || !foodDetails.nutrition) {
+        console.warn('⚠️ No nutrition data');
+        continue;
+      }
+
+      console.log('📊 Nutrition:', foodDetails.nutrition);
+
+      // Step 3: Create food entry
+      newFoods.push({
+        id: Date.now() + Math.random(),
+        food_id: firstFood.food_id,
+        food_name: firstFood.food_name,
+        serving_description: `${firstFood.serving_size}${firstFood.serving_unit}`,
+        nutrition: {
+          calories: parseFloat(foodDetails.nutrition.calories || 0),
+          protein: parseFloat(foodDetails.nutrition.protein || 0),
+          carbs: parseFloat(foodDetails.nutrition.carbs || 0),
+          fat: parseFloat(foodDetails.nutrition.fat || 0),
+          fiber: parseFloat(foodDetails.nutrition.fiber || 0),
+          sugar: parseFloat(foodDetails.nutrition.sugar || 0),
+          sodium: parseFloat(foodDetails.nutrition.sodium || 0)
+        }
+      });
     }
-  };
+
+    if (newFoods.length === 0) {
+      setError('❌ No foods found. Try: "egg", "apple", "cheese"');
+      setIsProcessingFood(false);
+      return;
+    }
+
+    // Step 4: Calculate total nutrition
+    let totalNutrition = {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      fiber: 0,
+      sugar: 0,
+      sodium: 0
+    };
+
+    newFoods.forEach(food => {
+      totalNutrition.calories += food.nutrition.calories || 0;
+      totalNutrition.protein += food.nutrition.protein || 0;
+      totalNutrition.carbs += food.nutrition.carbs || 0;
+      totalNutrition.fat += food.nutrition.fat || 0;
+      totalNutrition.fiber += food.nutrition.fiber || 0;
+      totalNutrition.sugar += food.nutrition.sugar || 0;
+      totalNutrition.sodium += food.nutrition.sodium || 0;
+    });
+
+    console.log('📊 Total nutrition:', totalNutrition);
+
+    // Step 5: Update state
+    setLoggedFoods(prev => [...prev, ...newFoods]);
+    
+    setDailyNutrition(prev => ({
+      calories: prev.calories + totalNutrition.calories,
+      protein: prev.protein + totalNutrition.protein,
+      carbs: prev.carbs + totalNutrition.carbs,
+      fat: prev.fat + totalNutrition.fat,
+      fiber: prev.fiber + totalNutrition.fiber,
+      sugar: prev.sugar + totalNutrition.sugar,
+      sodium: prev.sodium + totalNutrition.sodium
+    }));
+
+    setUserFoodInput('');
+    console.log('✅ Successfully logged', newFoods.length, 'foods');
+  } catch (err) {
+    console.error('❌ Error logging food:', err);
+    setError('Failed to log food. Check console for details.');
+  } finally {
+    setIsProcessingFood(false);
+  }
+};
 
   const removeLoggedFood = (foodId) => {
     const foodToRemove = loggedFoods.find(f => f.id === foodId);
